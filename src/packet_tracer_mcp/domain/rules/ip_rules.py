@@ -7,10 +7,10 @@ from ..models.errors import PlanError, ErrorCode
 
 
 def _has_control_chars(value: str) -> bool:
-    """El pool_name se interpola crudo en `ip dhcp pool {pool.pool_name}`.
+    """The pool_name is interpolated raw into `ip dhcp pool {pool.pool_name}`.
 
-    Un \\n ahí se convierte en un comando IOS extra una vez que PT separa el
-    payload por saltos de línea — igual que en hardening_rules y netflow_rules.
+    A \\n there becomes an extra IOS command once PT splits the payload by
+    newlines — same as in hardening_rules and netflow_rules.
     """
     return any(ch in value for ch in ("\n", "\r"))
 

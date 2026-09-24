@@ -200,8 +200,8 @@ def test_legitimate_hardening_still_works():
 
 
 def test_vlan_name_with_newline_is_rejected():
-    """El nombre de VLAN se interpolaba crudo en `name {v.name}` dentro del
-    payload de configureIosDevice; un \\n se convertía en un comando IOS extra."""
+    """The VLAN name was interpolated raw into `name {v.name}` inside the
+    configureIosDevice payload; a \\n became an extra IOS command."""
     plan = build_vlan_plan(
         switch="SW1",
         vlans=[{"vlan_id": 10, "name": "DATA\nusername hacker privilege 15 secret x"}],
@@ -223,8 +223,8 @@ def test_legitimate_vlan_still_works():
 
 
 def test_acl_remark_with_newline_is_rejected():
-    """El remark se interpolaba crudo en `access-list N remark {entry.remark}`
-    dentro del payload de configureIosDevice; un \\n colaba un comando IOS extra."""
+    """The remark was interpolated raw into `access-list N remark {entry.remark}`
+    inside the configureIosDevice payload; a \\n smuggled in an extra IOS command."""
     plan = build_acl_plan(
         router="R1",
         name_or_number="10",
@@ -243,7 +243,7 @@ def test_acl_remark_with_newline_is_rejected():
 
 
 def test_device_name_with_newline_is_rejected():
-    """El nombre de dispositivo se interpolaba crudo en `hostname {router.name}`."""
+    """The device name was interpolated raw into `hostname {router.name}`."""
     plan = TopologyPlan(
         name="t",
         devices=[DevicePlan(
@@ -257,7 +257,7 @@ def test_device_name_with_newline_is_rejected():
 
 
 def test_dhcp_pool_name_with_newline_is_rejected():
-    """pool_name se interpolaba crudo en `ip dhcp pool {pool.pool_name}`."""
+    """pool_name was interpolated raw into `ip dhcp pool {pool.pool_name}`."""
     plan = TopologyPlan(
         name="t",
         devices=[DevicePlan(

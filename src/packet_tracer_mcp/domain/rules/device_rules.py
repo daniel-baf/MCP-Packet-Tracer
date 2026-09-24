@@ -7,11 +7,11 @@ from ...infrastructure.catalog.devices import resolve_model
 
 
 def _has_control_chars(value: str) -> bool:
-    """El nombre del dispositivo se interpola crudo en `hostname {router.name}`.
+    """The device name is interpolated raw into `hostname {router.name}`.
 
-    Un \\n ahí sobrevive al escapado JS (es un carácter de datos válido) pero se
-    convierte en un comando IOS extra una vez que PT separa el payload por saltos
-    de línea — igual que en hardening_rules y netflow_rules.
+    A \\n there survives JS escaping (it's a valid data character) but becomes
+    an extra IOS command once PT splits the payload by newlines — same as in
+    hardening_rules and netflow_rules.
     """
     return any(ch in value for ch in ("\n", "\r"))
 

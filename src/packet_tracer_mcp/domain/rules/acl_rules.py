@@ -25,12 +25,12 @@ _PROTOCOLS_WITH_ICMP_TYPE = {"icmp"}
 
 
 def _has_control_chars(value: str) -> bool:
-    """El remark viaja dentro del payload de una sola línea de configureIosDevice.
+    """The remark travels inside a single-line configureIosDevice payload.
 
-    `acl_cli_generator.generate_acl_cli` lo interpola crudo en
-    `access-list N remark {entry.remark}`; un \\n ahí se convierte en un comando
-    IOS extra una vez que PT separa el payload por saltos de línea — igual que en
-    hardening_rules y netflow_rules.
+    `acl_cli_generator.generate_acl_cli` interpolates it raw into
+    `access-list N remark {entry.remark}`; a \\n there becomes an extra IOS
+    command once PT splits the payload by newlines — same as in
+    hardening_rules and netflow_rules.
     """
     return any(ch in value for ch in ("\n", "\r"))
 

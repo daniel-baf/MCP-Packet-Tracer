@@ -7,12 +7,12 @@ from ..models.errors import PlanError, ErrorCode, ValidationResult
 
 
 def _has_control_chars(value: str) -> bool:
-    """El nombre de VLAN viaja dentro del payload de una sola línea de configureIosDevice.
+    """The VLAN name travels inside a single-line configureIosDevice payload.
 
-    `vlan_cli_generator.generate_switch_vlan_cli` lo interpola crudo en `name {v.name}`;
-    un \\n ahí no rompe el JS (se escapa correctamente), pero se convierte en un
-    comando IOS extra una vez que PT separa el payload por saltos de línea — igual
-    que en hardening_rules y netflow_rules.
+    `vlan_cli_generator.generate_switch_vlan_cli` interpolates it raw into
+    `name {v.name}`; a \\n there doesn't break the JS (it's escaped correctly),
+    but it becomes an extra IOS command once PT splits the payload by
+    newlines — same as in hardening_rules and netflow_rules.
     """
     return any(ch in value for ch in ("\n", "\r"))
 
