@@ -14,7 +14,9 @@ from src.packet_tracer_mcp.shared.utils import (
     resolve_within,
     interpret_ping,
 )
-from src.packet_tracer_mcp.domain.models.plans import TopologyPlan, DevicePlan
+from src.packet_tracer_mcp.domain.models.plans import TopologyPlan, DevicePlan, DHCPPool
+from src.packet_tracer_mcp.domain.rules.device_rules import validate_devices
+from src.packet_tracer_mcp.domain.rules.ip_rules import validate_dhcp
 from src.packet_tracer_mcp.infrastructure.generator.ptbuilder_generator import (
     generate_ptbuilder_script,
 )
@@ -22,6 +24,14 @@ from src.packet_tracer_mcp.infrastructure.execution.manual_executor import Manua
 from src.packet_tracer_mcp.application.use_cases.apply_hardening import (
     build_hardening_config,
     apply_hardening_uc,
+)
+from src.packet_tracer_mcp.application.use_cases.apply_vlan import (
+    build_vlan_plan,
+    apply_vlan_uc,
+)
+from src.packet_tracer_mcp.application.use_cases.apply_acl import (
+    build_acl_plan,
+    apply_acl_uc,
 )
 
 HOSTILE_NAMES = [
@@ -184,3 +194,82 @@ def test_legitimate_hardening_still_works():
     assert result["valid"]
     assert result["sent"]
     assert len(sent) == 1
+
+
+# --- Inyección vía nombre de VLAN / remark de ACL / nombre de dispositivo --
+
+
+def test_vlan_name_with_newline_is_rejected():
+    """El nombre de VLAN se interpolaba crudo en `name {v.name}` dentro del
+    payload de configureIosDevice; un \\n se convertía en un comando IOS extra."""
+    plan = build_vlan_plan(
+        switch="SW1",
+        vlans=[{"vlan_id": 10, "name": "DATA\nusername hacker privilege 15 secret x"}],
+    )
+    sent = []
+    result = apply_vlan_uc(plan, bridge_send=lambda js: sent.append(js) or True)
+    assert not result["valid"]
+    assert not result["sent"]
+    assert not sent
+
+
+def test_legitimate_vlan_still_works():
+    plan = build_vlan_plan(switch="SW1", vlans=[{"vlan_id": 10, "name": "DATA"}])
+    sent = []
+    result = apply_vlan_uc(plan, bridge_send=lambda js: sent.append(js) or True)
+    assert result["valid"]
+    assert result["sent"]
+    assert len(sent) == 1
+
+
+def test_acl_remark_with_newline_is_rejected():
+    """El remark se interpolaba crudo en `access-list N remark {entry.remark}`
+    dentro del payload de configureIosDevice; un \\n colaba un comando IOS extra."""
+    plan = build_acl_plan(
+        router="R1",
+        name_or_number="10",
+        acl_type="standard",
+        entries_dicts=[{
+            "action": "permit",
+            "source": "any",
+            "remark": "ok\nusername hacker privilege 15 secret x",
+        }],
+    )
+    sent = []
+    result = apply_acl_uc(plan, bridge_send=lambda js: sent.append(js) or True)
+    assert not result["valid"]
+    assert not result["sent"]
+    assert not sent
+
+
+def test_device_name_with_newline_is_rejected():
+    """El nombre de dispositivo se interpolaba crudo en `hostname {router.name}`."""
+    plan = TopologyPlan(
+        name="t",
+        devices=[DevicePlan(
+            name="R1\nusername hacker privilege 15 secret x",
+            model="2911", category="router",
+        )],
+        links=[],
+    )
+    errors = validate_devices(plan)
+    assert any(e.code.value == "DEVICE_INVALID_NAME" for e in errors)
+
+
+def test_dhcp_pool_name_with_newline_is_rejected():
+    """pool_name se interpolaba crudo en `ip dhcp pool {pool.pool_name}`."""
+    plan = TopologyPlan(
+        name="t",
+        devices=[DevicePlan(
+            name="R1", model="2911", category="router",
+            interfaces={"GigabitEthernet0/0": "10.0.0.1/24"},
+        )],
+        links=[],
+        dhcp_pools=[DHCPPool(
+            router="R1",
+            pool_name="LAN\nusername hacker privilege 15 secret x",
+            network="10.0.0.0", mask="255.255.255.0", gateway="10.0.0.1",
+        )],
+    )
+    errors = validate_dhcp(plan)
+    assert any(e.code.value == "DHCP_INVALID_POOL_NAME" for e in errors)

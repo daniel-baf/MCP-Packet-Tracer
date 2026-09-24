@@ -6,12 +6,30 @@ from ..models.errors import PlanError, ErrorCode, ValidationResult
 from ...infrastructure.catalog.devices import resolve_model
 
 
+def _has_control_chars(value: str) -> bool:
+    """El nombre del dispositivo se interpola crudo en `hostname {router.name}`.
+
+    Un \\n ahí sobrevive al escapado JS (es un carácter de datos válido) pero se
+    convierte en un comando IOS extra una vez que PT separa el payload por saltos
+    de línea — igual que en hardening_rules y netflow_rules.
+    """
+    return any(ch in value for ch in ("\n", "\r"))
+
+
 def validate_devices(plan: TopologyPlan) -> list[PlanError]:
     """Valida que todos los dispositivos sean válidos."""
     errors: list[PlanError] = []
     names_seen: set[str] = set()
 
     for dev in plan.devices:
+        if _has_control_chars(dev.name):
+            errors.append(PlanError(
+                code=ErrorCode.DEVICE_INVALID_NAME,
+                device=dev.name,
+                message=f"El nombre del dispositivo '{dev.name}' contiene un salto de línea.",
+                suggestion="Usa un nombre de dispositivo de una sola línea.",
+            ))
+
         if dev.name in names_seen:
             errors.append(PlanError(
                 code=ErrorCode.DUPLICATE_DEVICE_NAME,

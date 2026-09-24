@@ -6,6 +6,15 @@ from ..models.plans import TopologyPlan
 from ..models.errors import PlanError, ErrorCode
 
 
+def _has_control_chars(value: str) -> bool:
+    """El pool_name se interpola crudo en `ip dhcp pool {pool.pool_name}`.
+
+    Un \\n ahí se convierte en un comando IOS extra una vez que PT separa el
+    payload por saltos de línea — igual que en hardening_rules y netflow_rules.
+    """
+    return any(ch in value for ch in ("\n", "\r"))
+
+
 def validate_ips(plan: TopologyPlan) -> list[PlanError]:
     """Verifica que no haya conflictos de IP."""
     errors: list[PlanError] = []
@@ -44,6 +53,14 @@ def validate_dhcp(plan: TopologyPlan) -> list[PlanError]:
     errors: list[PlanError] = []
 
     for pool in plan.dhcp_pools:
+        if _has_control_chars(pool.pool_name):
+            errors.append(PlanError(
+                code=ErrorCode.DHCP_INVALID_POOL_NAME,
+                device=pool.router,
+                message=f"El nombre del pool DHCP '{pool.pool_name}' contiene un salto de línea.",
+                suggestion="Usa un nombre de pool de una sola línea.",
+            ))
+
         router = plan.device_by_name(pool.router)
         if router is None:
             errors.append(PlanError(

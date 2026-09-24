@@ -24,6 +24,17 @@ _PROTOCOLS_WITH_PORTS = {"tcp", "udp"}
 _PROTOCOLS_WITH_ICMP_TYPE = {"icmp"}
 
 
+def _has_control_chars(value: str) -> bool:
+    """El remark viaja dentro del payload de una sola línea de configureIosDevice.
+
+    `acl_cli_generator.generate_acl_cli` lo interpola crudo en
+    `access-list N remark {entry.remark}`; un \\n ahí se convierte en un comando
+    IOS extra una vez que PT separa el payload por saltos de línea — igual que en
+    hardening_rules y netflow_rules.
+    """
+    return any(ch in value for ch in ("\n", "\r"))
+
+
 def validate_acl_plan(plan: ACLPlan) -> ValidationResult:
     """Valida un ACLPlan estáticamente."""
     errors: list[PlanError] = []
@@ -105,6 +116,14 @@ def _validate_entries(plan: ACLPlan, errors: list[PlanError], warnings: list[Pla
 
     for idx, entry in enumerate(plan.entries):
         label = f"ACL '{plan.name_or_number}' regla #{idx + 1}"
+
+        if entry.remark and _has_control_chars(entry.remark):
+            errors.append(PlanError(
+                code=ErrorCode.ACL_INVALID_REMARK,
+                device=plan.router,
+                message=f"{label}: el remark contiene un salto de línea.",
+                suggestion="Usa un remark de una sola línea.",
+            ))
 
         # Sequence duplicada
         if entry.sequence is not None:

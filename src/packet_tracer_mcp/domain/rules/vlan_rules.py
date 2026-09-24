@@ -6,6 +6,17 @@ from ..models.vlans import VLANPlan
 from ..models.errors import PlanError, ErrorCode, ValidationResult
 
 
+def _has_control_chars(value: str) -> bool:
+    """El nombre de VLAN viaja dentro del payload de una sola línea de configureIosDevice.
+
+    `vlan_cli_generator.generate_switch_vlan_cli` lo interpola crudo en `name {v.name}`;
+    un \\n ahí no rompe el JS (se escapa correctamente), pero se convierte en un
+    comando IOS extra una vez que PT separa el payload por saltos de línea — igual
+    que en hardening_rules y netflow_rules.
+    """
+    return any(ch in value for ch in ("\n", "\r"))
+
+
 def validate_vlan_plan(plan: VLANPlan) -> ValidationResult:
     """Valida un VLANPlan sin tocar PT (rangos, duplicados, coherencia)."""
     errors: list[PlanError] = []
@@ -19,6 +30,13 @@ def validate_vlan_plan(plan: VLANPlan) -> ValidationResult:
                 device=plan.switch or plan.router,
                 message=f"VLAN id {v.vlan_id} fuera de rango (1-4094).",
                 suggestion="Usa un id entre 1 y 4094 (evita 1002-1005 reservadas).",
+            ))
+        if v.name and _has_control_chars(v.name):
+            errors.append(PlanError(
+                code=ErrorCode.VLAN_INVALID_NAME,
+                device=plan.switch or plan.router,
+                message=f"El nombre de la VLAN {v.vlan_id} contiene un salto de línea.",
+                suggestion="Usa un nombre de VLAN de una sola línea.",
             ))
         if v.vlan_id in seen:
             errors.append(PlanError(
