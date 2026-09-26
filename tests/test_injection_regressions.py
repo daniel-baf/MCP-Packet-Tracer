@@ -32,6 +32,12 @@ from src.packet_tracer_mcp.application.use_cases.apply_vlan import (
 from src.packet_tracer_mcp.application.use_cases.apply_acl import (
     build_acl_plan,
     apply_acl_uc,
+    remove_acl_uc,
+)
+from src.packet_tracer_mcp.application.use_cases.apply_nat import (
+    build_nat_config,
+    apply_nat_uc,
+    remove_nat_uc,
 )
 
 HOSTILE_NAMES = [
@@ -273,3 +279,104 @@ def test_dhcp_pool_name_with_newline_is_rejected():
     )
     errors = validate_dhcp(plan)
     assert any(e.code.value == "DHCP_INVALID_POOL_NAME" for e in errors)
+
+
+# --- Inyección vía nombre de ACL nombrada / pool NAT / rutas de remove -----
+
+HOSTILE_SUFFIX = "\nusername hacker privilege 15 secret x"
+
+
+def test_named_acl_name_with_newline_is_rejected():
+    """Un nombre no numérico se aceptaba sin mirar: `access-list {name} ...`
+    llevaba el comando extra al dispositivo."""
+    plan = build_acl_plan(
+        router="R1",
+        name_or_number="BLOCK" + HOSTILE_SUFFIX,
+        acl_type="standard",
+        entries_dicts=[{"action": "permit", "source": "any"}],
+    )
+    sent = []
+    result = apply_acl_uc(plan, bridge_send=lambda js: sent.append(js) or True)
+    assert not result["valid"]
+    assert not sent
+
+
+def test_remove_acl_with_newline_is_not_sent():
+    """remove_acl_uc no validaba nada: el nombre iba directo a `no access-list`."""
+    sent = []
+    result = remove_acl_uc(
+        router="R1", name_or_number="BLOCK" + HOSTILE_SUFFIX,
+        bridge_send=lambda js: sent.append(js) or True,
+    )
+    assert not result["valid"]
+    assert not result["sent"]
+    assert not sent
+
+
+def _nat(**overrides):
+    args = dict(
+        router="R1", mode="dynamic",
+        inside_interface="GigabitEthernet0/1", outside_interface="GigabitEthernet0/0",
+        inside_networks=["192.168.0.0 0.0.0.255"],
+        pool_name="PUBLIC", pool_start="200.0.0.1", pool_end="200.0.0.10",
+        pool_netmask="255.255.255.0",
+    )
+    args.update(overrides)
+    return build_nat_config(**args)
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("pool_name", "PUBLIC" + HOSTILE_SUFFIX),
+        ("acl_number", "1" + HOSTILE_SUFFIX),
+    ],
+)
+def test_nat_fields_with_newline_are_rejected(field, value):
+    """pool_name y acl_number se interpolaban crudos en `ip nat pool {name}` y
+    `ip nat inside source list {acl} pool {name}`."""
+    sent = []
+    result = apply_nat_uc(_nat(**{field: value}), bridge_send=lambda js: sent.append(js) or True)
+    assert not result["valid"], f"{field} aceptó un salto de línea"
+    assert not sent
+
+
+def test_legitimate_nat_still_works():
+    sent = []
+    result = apply_nat_uc(_nat(), bridge_send=lambda js: sent.append(js) or True)
+    assert result["valid"]
+    assert result["sent"]
+    assert len(sent) == 1
+
+
+def test_remove_nat_with_newline_is_not_sent():
+    sent = []
+    result = remove_nat_uc(
+        router="R1", mode="dynamic",
+        inside_interface="GigabitEthernet0/1", outside_interface="GigabitEthernet0/0",
+        pool_name="PUBLIC" + HOSTILE_SUFFIX,
+        bridge_send=lambda js: sent.append(js) or True,
+    )
+    assert not result["valid"]
+    assert not result["sent"]
+    assert not sent
+
+
+def test_legitimate_remove_still_sends():
+    sent = []
+    result = remove_acl_uc(router="R1", name_or_number="BLOCK",
+                           bridge_send=lambda js: sent.append(js) or True)
+    assert result["valid"]
+    assert result["sent"]
+    assert len(sent) == 1
+
+
+@pytest.mark.parametrize("sep", ["\u2028", "\u2029"])
+def test_unicode_line_separators_are_rejected_too(sep):
+    """U+2028/U+2029 terminan una línea en JS igual que \\n; netflow_rules ya los
+    rechazaba y ahora todas las reglas comparten el mismo chequeo."""
+    plan = build_vlan_plan(switch="SW1", vlans=[{"vlan_id": 10, "name": "DATA" + sep}])
+    sent = []
+    result = apply_vlan_uc(plan, bridge_send=lambda js: sent.append(js) or True)
+    assert not result["valid"]
+    assert not sent

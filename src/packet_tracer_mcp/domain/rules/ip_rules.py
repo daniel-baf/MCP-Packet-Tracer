@@ -4,15 +4,7 @@ from __future__ import annotations
 import ipaddress
 from ..models.plans import TopologyPlan
 from ..models.errors import PlanError, ErrorCode
-
-
-def _has_control_chars(value: str) -> bool:
-    """The pool_name is interpolated raw into `ip dhcp pool {pool.pool_name}`.
-
-    A \\n there becomes an extra IOS command once PT splits the payload by
-    newlines — same as in hardening_rules and netflow_rules.
-    """
-    return any(ch in value for ch in ("\n", "\r"))
+from .text_rules import has_control_chars
 
 
 def validate_ips(plan: TopologyPlan) -> list[PlanError]:
@@ -53,7 +45,7 @@ def validate_dhcp(plan: TopologyPlan) -> list[PlanError]:
     errors: list[PlanError] = []
 
     for pool in plan.dhcp_pools:
-        if _has_control_chars(pool.pool_name):
+        if has_control_chars(pool.pool_name):
             errors.append(PlanError(
                 code=ErrorCode.DHCP_INVALID_POOL_NAME,
                 device=pool.router,

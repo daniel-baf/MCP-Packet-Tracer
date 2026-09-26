@@ -4,17 +4,7 @@ from __future__ import annotations
 
 from ..models.vlans import VLANPlan
 from ..models.errors import PlanError, ErrorCode, ValidationResult
-
-
-def _has_control_chars(value: str) -> bool:
-    """The VLAN name travels inside a single-line configureIosDevice payload.
-
-    `vlan_cli_generator.generate_switch_vlan_cli` interpolates it raw into
-    `name {v.name}`; a \\n there doesn't break the JS (it's escaped correctly),
-    but it becomes an extra IOS command once PT splits the payload by
-    newlines — same as in hardening_rules and netflow_rules.
-    """
-    return any(ch in value for ch in ("\n", "\r"))
+from .text_rules import has_control_chars
 
 
 def validate_vlan_plan(plan: VLANPlan) -> ValidationResult:
@@ -31,7 +21,7 @@ def validate_vlan_plan(plan: VLANPlan) -> ValidationResult:
                 message=f"VLAN id {v.vlan_id} fuera de rango (1-4094).",
                 suggestion="Usa un id entre 1 y 4094 (evita 1002-1005 reservadas).",
             ))
-        if v.name and _has_control_chars(v.name):
+        if v.name and has_control_chars(v.name):
             errors.append(PlanError(
                 code=ErrorCode.VLAN_INVALID_NAME,
                 device=plan.switch or plan.router,

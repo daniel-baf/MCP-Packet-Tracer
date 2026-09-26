@@ -4,16 +4,7 @@ from __future__ import annotations
 from ..models.plans import TopologyPlan
 from ..models.errors import PlanError, ErrorCode, ValidationResult
 from ...infrastructure.catalog.devices import resolve_model
-
-
-def _has_control_chars(value: str) -> bool:
-    """The device name is interpolated raw into `hostname {router.name}`.
-
-    A \\n there survives JS escaping (it's a valid data character) but becomes
-    an extra IOS command once PT splits the payload by newlines — same as in
-    hardening_rules and netflow_rules.
-    """
-    return any(ch in value for ch in ("\n", "\r"))
+from .text_rules import has_control_chars
 
 
 def validate_devices(plan: TopologyPlan) -> list[PlanError]:
@@ -22,7 +13,7 @@ def validate_devices(plan: TopologyPlan) -> list[PlanError]:
     names_seen: set[str] = set()
 
     for dev in plan.devices:
-        if _has_control_chars(dev.name):
+        if has_control_chars(dev.name):
             errors.append(PlanError(
                 code=ErrorCode.DEVICE_INVALID_NAME,
                 device=dev.name,

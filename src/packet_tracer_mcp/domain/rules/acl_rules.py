@@ -10,6 +10,7 @@ import ipaddress
 
 from ..models.acls import ACLPlan, ACLBinding, ACLEntry
 from ..models.errors import PlanError, ErrorCode, ValidationResult
+from .text_rules import has_control_chars
 
 
 # Rangos numéricos de IOS:
@@ -22,17 +23,6 @@ _EXTENDED_RANGES = [(100, 199), (2000, 2699)]
 
 _PROTOCOLS_WITH_PORTS = {"tcp", "udp"}
 _PROTOCOLS_WITH_ICMP_TYPE = {"icmp"}
-
-
-def _has_control_chars(value: str) -> bool:
-    """The remark travels inside a single-line configureIosDevice payload.
-
-    `acl_cli_generator.generate_acl_cli` interpolates it raw into
-    `access-list N remark {entry.remark}`; a \\n there becomes an extra IOS
-    command once PT splits the payload by newlines — same as in
-    hardening_rules and netflow_rules.
-    """
-    return any(ch in value for ch in ("\n", "\r"))
 
 
 def validate_acl_plan(plan: ACLPlan) -> ValidationResult:
@@ -79,6 +69,15 @@ def validate_acl_binding(binding: ACLBinding, plan: ACLPlan) -> ValidationResult
 
 def _validate_number_or_name(plan: ACLPlan, errors: list[PlanError]) -> None:
     """Si name_or_number es numérico, debe estar en rango coherente con acl_type."""
+    if has_control_chars(plan.name_or_number):
+        errors.append(PlanError(
+            code=ErrorCode.ACL_INVALID_NAME,
+            device=plan.router,
+            message="El nombre de la ACL contiene un salto de línea.",
+            suggestion="Usa un nombre de ACL de una sola línea.",
+        ))
+        return
+
     nn = plan.name_or_number.strip()
     if not nn.isdigit():
         # Nombre alfanumérico — IOS lo acepta para named ACLs
@@ -117,7 +116,7 @@ def _validate_entries(plan: ACLPlan, errors: list[PlanError], warnings: list[Pla
     for idx, entry in enumerate(plan.entries):
         label = f"ACL '{plan.name_or_number}' regla #{idx + 1}"
 
-        if entry.remark and _has_control_chars(entry.remark):
+        if entry.remark and has_control_chars(entry.remark):
             errors.append(PlanError(
                 code=ErrorCode.ACL_INVALID_REMARK,
                 device=plan.router,
